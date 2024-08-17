@@ -12,7 +12,7 @@ This tool is a (hastily written) solver for sigil puzzles from the games ["The T
 
 # Help
 ```
-Usage: ttp_puzzle_solver.exe [OPTIONS] <WIDTH> <HEIGHT>
+Usage: ttp_puzzle_solver [OPTIONS] <WIDTH> <HEIGHT>
 
 Arguments:
   <WIDTH>
