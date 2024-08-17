@@ -1,4 +1,4 @@
-# The Talos Prinziple Puzzle Solver
+# The Talos Principle Puzzle Solver
 
 This tool is a (hastily written) solver for sigil puzzles from the games ["The Talos Principle"](https://store.steampowered.com/app/257510/The_Talos_Principle/) and ["Sigils of Elohim"](https://store.steampowered.com/app/321480/Sigils_of_Elohim/).
 
