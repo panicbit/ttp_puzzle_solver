@@ -1,3 +1,4 @@
+use std::sync::{mpsc, Mutex};
 use std::{fmt, iter};
 
 use clap::Parser;
@@ -61,6 +62,7 @@ fn main() {
     println!("{grid}");
 }
 
+#[derive(Clone)]
 struct Grid {
     width: i8,
     height: i8,
@@ -89,6 +91,48 @@ impl Grid {
     }
 
     fn fill_with_rec(&mut self, shapes: &mut [(&Shape, usize)], placement_index: usize) -> bool {
+        let cancelled = &Mutex::new(false);
+
+        std::thread::scope(|scope| {
+            let (tx, rx) = mpsc::channel();
+
+            for _ in 0..shapes.len() {
+                let mut new_shapes = shapes.to_vec();
+                let mut grid = self.clone();
+                let tx = tx.clone();
+
+                scope.spawn(move || {
+                    let filled = grid.fill_with_rec_single_thread(
+                        &mut new_shapes,
+                        placement_index,
+                        cancelled,
+                    );
+                    tx.send((grid, filled)).ok();
+                });
+
+                shapes.rotate_left(1);
+            }
+
+            for (grid, filled) in rx {
+                if !filled {
+                    continue;
+                }
+
+                *cancelled.lock().unwrap() = true;
+                *self = grid;
+                return true;
+            }
+
+            false
+        })
+    }
+
+    fn fill_with_rec_single_thread(
+        &mut self,
+        shapes: &mut [(&Shape, usize)],
+        placement_index: usize,
+        cancelled: &Mutex<bool>,
+    ) -> bool {
         if shapes.iter().all(|&(_, amount)| amount == 0) {
             return true;
         }
@@ -113,8 +157,12 @@ impl Grid {
 
                 // println!("{self}");
 
-                if self.fill_with_rec(shapes, placement_index + 1) {
+                if self.fill_with_rec_single_thread(shapes, placement_index + 1, cancelled) {
                     return true;
+                }
+
+                if *cancelled.lock().unwrap() {
+                    return false;
                 }
 
                 self.remove(pieces, placement_vector);
