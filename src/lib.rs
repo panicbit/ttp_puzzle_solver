@@ -42,7 +42,13 @@ impl Grid {
         None
     }
 
-    pub fn fill_with_rec(
+    pub fn fill_with(&mut self, shapes: &[(&Shape, usize)]) -> bool {
+        let mut shapes = shapes.to_owned();
+
+        self.fill_with_rec(&mut shapes, 0, 0, 0)
+    }
+
+    fn fill_with_rec(
         &mut self,
         shapes: &mut [(&Shape, usize)],
         placement_index: usize,

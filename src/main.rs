@@ -32,11 +32,11 @@ fn main() {
         reverse_l: cli.reverse_l,
         t: cli.t,
     };
-    let mut available_shapes = shapeset.to_shapes();
+    let available_shapes = shapeset.to_shapes();
 
     let mut grid = Grid::new(cli.width, cli.height);
 
-    if !grid.fill_with_rec(&mut available_shapes, 0, 0, 0) {
+    if !grid.fill_with(&available_shapes) {
         println!("failed to fill the grid! :(");
     }
 
