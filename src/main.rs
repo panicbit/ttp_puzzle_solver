@@ -3,8 +3,8 @@ use ttp_puzzle_solver::{Grid, ShapeSet};
 
 #[derive(clap::Parser)]
 struct Cli {
-    width: u8,
-    height: u8,
+    width: usize,
+    height: usize,
     #[clap(short, long, default_value_t = 0)]
     square: usize,
     #[clap(short = 'i', long, default_value_t = 0)]
@@ -34,9 +34,7 @@ fn main() {
     };
     let mut available_shapes = shapeset.to_shapes();
 
-    let width = i8::try_from(cli.width).expect("grid is too wide");
-    let height = i8::try_from(cli.height).expect("grid is too tall");
-    let mut grid = Grid::new(width, height);
+    let mut grid = Grid::new(cli.width, cli.height);
 
     if !grid.fill_with_rec(&mut available_shapes, 0) {
         println!("failed to fill the grid! :(");

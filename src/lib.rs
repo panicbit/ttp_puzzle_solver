@@ -1,34 +1,34 @@
 use std::{fmt, iter};
 
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::FnvHashSet;
 use pastel::ansi::{Brush, Stream, Style};
 use pastel::distinct::{distinct_colors, DistanceMetric};
 
 pub struct Grid {
-    width: i8,
-    height: i8,
-    cells: FnvHashMap<(i8, i8), (usize, char)>,
+    cells: Array2<Option<(usize, char)>>,
 }
 
 impl Grid {
-    pub fn new(width: i8, height: i8) -> Self {
+    pub fn new(width: usize, height: usize) -> Self {
         Self {
-            width,
-            height,
-            cells: <_>::default(),
+            cells: Array2::new(width, height),
         }
     }
 
-    fn is_vacant(&self, (x, y): (i8, i8)) -> bool {
-        if x < 0 || y < 0 {
-            return false;
-        }
+    pub fn width(&self) -> usize {
+        self.cells.width
+    }
 
-        if x >= self.width || y >= self.height {
-            return false;
-        }
+    pub fn height(&self) -> usize {
+        self.cells.height
+    }
 
-        !self.cells.contains_key(&(x, y))
+    fn is_vacant(&self, (x, y): (isize, isize)) -> bool {
+        let Some(cell) = self.cells.get((x, y)) else {
+            return false;
+        };
+
+        cell.is_none()
     }
 
     pub fn fill_with_rec(
@@ -75,14 +75,22 @@ impl Grid {
         false
     }
 
-    fn find_placement_vector(&self, pieces: &FnvHashSet<(i8, i8)>) -> Option<(i8, i8)> {
-        for grid_y in 0..self.height {
-            for grid_x in 0..self.width {
+    fn find_placement_vector(&self, pieces: &FnvHashSet<(isize, isize)>) -> Option<(isize, isize)> {
+        for grid_y in 0..self.height() as isize {
+            for grid_x in 0..self.width() as isize {
                 'next_origin: for (x_origin, y_origin) in pieces {
                     let placement_vector = (grid_x + x_origin, grid_y + y_origin);
 
                     for (x, y) in pieces {
                         let (x, y) = (placement_vector.0 - x, placement_vector.1 - y);
+
+                        if x < 0
+                            || y < 0
+                            || x >= self.width() as isize
+                            || y >= self.height() as isize
+                        {
+                            assert!(!self.is_vacant((x, y)), "vacant for {x}, {y}");
+                        }
 
                         if !self.is_vacant((x, y)) {
                             continue 'next_origin;
@@ -99,8 +107,8 @@ impl Grid {
 
     fn place(
         &mut self,
-        pieces: &FnvHashSet<(i8, i8)>,
-        placement_vector: (i8, i8),
+        pieces: &FnvHashSet<(isize, isize)>,
+        placement_vector: (isize, isize),
         placement_index: usize,
         glyph: char,
     ) {
@@ -108,16 +116,16 @@ impl Grid {
             let x = placement_vector.0 - x;
             let y = placement_vector.1 - y;
 
-            self.cells.insert((x, y), (placement_index, glyph));
+            self.cells.set((x, y), Some((placement_index, glyph)));
         }
     }
 
-    fn remove(&mut self, pieces: &FnvHashSet<(i8, i8)>, placement_vector: (i8, i8)) {
+    fn remove(&mut self, pieces: &FnvHashSet<(isize, isize)>, placement_vector: (isize, isize)) {
         for (x, y) in pieces {
             let x = placement_vector.0 - x;
             let y = placement_vector.1 - y;
 
-            self.cells.remove(&(x, y));
+            self.cells.set((x, y), None);
         }
     }
 }
@@ -127,6 +135,7 @@ impl fmt::Display for Grid {
         let num_placements = self
             .cells
             .values()
+            .flatten()
             .map(|(placement_index, _)| placement_index)
             .max()
             .copied()
@@ -140,17 +149,21 @@ impl fmt::Display for Grid {
             distinct_colors(num_placements, distance_metric, fixed_colors, &mut |_| {});
 
         write!(f, "┌")?;
-        for _ in 0..self.width {
+        for _ in 0..self.width() {
             write!(f, "─")?;
         }
         writeln!(f, "┐")?;
 
-        for y in 0..self.height {
+        for y in 0..self.height() {
             write!(f, "│")?;
 
-            for x in 0..self.width {
-                let (placement_index, _glyph) =
-                    self.cells.get(&(x, y)).copied().unwrap_or((0, ' '));
+            for x in 0..self.width() {
+                let (placement_index, _glyph) = self
+                    .cells
+                    .get((x, y))
+                    .copied()
+                    .flatten()
+                    .unwrap_or((0, ' '));
                 let color = &colors[placement_index];
                 let mut style = Style::default();
                 style.on(color);
@@ -163,7 +176,7 @@ impl fmt::Display for Grid {
         }
 
         write!(f, "└")?;
-        for _ in 0..self.width {
+        for _ in 0..self.width() {
             write!(f, "─")?;
         }
         write!(f, "┘")?;
@@ -174,8 +187,8 @@ impl fmt::Display for Grid {
 
 #[derive(Clone)]
 pub struct Shape {
-    pieces: FnvHashSet<(i8, i8)>,
-    additional_rotations: Vec<FnvHashSet<(i8, i8)>>,
+    pieces: FnvHashSet<(isize, isize)>,
+    additional_rotations: Vec<FnvHashSet<(isize, isize)>>,
     glyph: char,
 }
 
@@ -189,7 +202,7 @@ impl Shape {
                     continue;
                 }
 
-                pieces.insert((x as i8, y as i8));
+                pieces.insert((x as isize, y as isize));
             }
         }
 
@@ -211,11 +224,11 @@ impl Shape {
         }
     }
 
-    fn rotate_pieces(pieces: &FnvHashSet<(i8, i8)>) -> FnvHashSet<(i8, i8)> {
+    fn rotate_pieces(pieces: &FnvHashSet<(isize, isize)>) -> FnvHashSet<(isize, isize)> {
         pieces.iter().map(|&(x, y)| (y, -x)).collect()
     }
 
-    fn all_rotations(&self) -> impl Iterator<Item = &FnvHashSet<(i8, i8)>> {
+    fn all_rotations(&self) -> impl Iterator<Item = &FnvHashSet<(isize, isize)>> {
         iter::once(&self.pieces).chain(&self.additional_rotations)
     }
 }
@@ -279,4 +292,100 @@ pub mod shape {
     pub static L: LazyLock<Shape> = LazyLock::new(|| Shape::from_str("###\n#", 3, 'L'));
     pub static REVERSE_L: LazyLock<Shape> = LazyLock::new(|| Shape::from_str("#\n###", 3, '⅃'));
     pub static T: LazyLock<Shape> = LazyLock::new(|| Shape::from_str("###\n #", 3, 'T'));
+}
+
+pub struct Array2<T> {
+    inner: Vec<T>,
+    width: usize,
+    height: usize,
+}
+
+impl<T> Array2<T> {
+    pub fn new(width: usize, height: usize) -> Self
+    where
+        T: Default,
+    {
+        let size = width * height;
+        let mut inner = Vec::with_capacity(size);
+
+        for _ in 0..size {
+            inner.push(T::default());
+        }
+
+        debug_assert_eq!(inner.len(), size);
+
+        Self {
+            inner,
+            width,
+            height,
+        }
+    }
+
+    fn linear_index(&self, index: impl Array2Index) -> Option<usize> {
+        index.linear_index(self.width, self.height)
+    }
+
+    pub fn get(&self, index: impl Array2Index) -> Option<&T> {
+        self.inner.get(self.linear_index(index)?)
+    }
+
+    pub fn set(&mut self, index: impl Array2Index, element: T) {
+        let Some(index) = self.linear_index(index) else {
+            return;
+        };
+
+        let Some(cell) = self.inner.get_mut(index) else {
+            return;
+        };
+
+        *cell = element;
+    }
+
+    fn values(&self) -> impl Iterator<Item = &T> {
+        self.inner.iter()
+    }
+
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
+}
+
+pub trait Array2Index {
+    fn linear_index(self, width: usize, height: usize) -> Option<usize>;
+}
+
+impl Array2Index for (usize, usize) {
+    fn linear_index(self, width: usize, height: usize) -> Option<usize> {
+        let (x, y) = self;
+
+        if x >= width || y >= height {
+            return None;
+        }
+
+        width.checked_mul(y)?.checked_add(x)
+    }
+}
+
+impl Array2Index for (i32, i32) {
+    fn linear_index(self, width: usize, height: usize) -> Option<usize> {
+        let (x, y) = self;
+        let x = usize::try_from(x).ok()?;
+        let y = usize::try_from(y).ok()?;
+
+        (x, y).linear_index(width, height)
+    }
+}
+
+impl Array2Index for (isize, isize) {
+    fn linear_index(self, width: usize, height: usize) -> Option<usize> {
+        let (x, y) = self;
+        let x = usize::try_from(x).ok()?;
+        let y = usize::try_from(y).ok()?;
+
+        (x, y).linear_index(width, height)
+    }
 }
