@@ -36,7 +36,7 @@ fn main() {
 
     let mut grid = Grid::new(cli.width, cli.height);
 
-    if !grid.fill_with_rec(&mut available_shapes, 0) {
+    if !grid.fill_with_rec(&mut available_shapes, 0, 0, 0) {
         println!("failed to fill the grid! :(");
     }
 

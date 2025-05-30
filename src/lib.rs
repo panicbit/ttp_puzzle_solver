@@ -30,14 +30,32 @@ impl Grid {
         cell.is_none()
     }
 
+    fn find_vacant_from(&self, (_x, y): (isize, isize)) -> Option<(isize, isize)> {
+        for y in y..self.height() as isize {
+            for x in 0..self.width() as isize {
+                if self.is_vacant((x, y)) {
+                    return Some((x, y));
+                }
+            }
+        }
+
+        None
+    }
+
     pub fn fill_with_rec(
         &mut self,
         shapes: &mut [(&Shape, usize)],
         placement_index: usize,
+        x: isize,
+        y: isize,
     ) -> bool {
         if shapes.iter().all(|&(_, amount)| amount == 0) {
             return true;
         }
+
+        let Some((x, y)) = self.find_vacant_from((x, y)) else {
+            return false;
+        };
 
         for i in 0..shapes.len() {
             let amount = &mut shapes[i].1;
@@ -51,19 +69,17 @@ impl Grid {
             let shape = shapes[i].0;
 
             for pieces in shape.all_rotations() {
-                let Some(placement_vector) = self.find_placement_vector(pieces) else {
+                if !self.can_place_pieces_at(pieces, (x, y)) {
                     continue;
-                };
+                }
 
-                self.place(pieces, placement_vector, placement_index, shape.glyph);
+                self.place(pieces, (x, y), placement_index, shape.glyph);
 
-                // println!("{self}");
-
-                if self.fill_with_rec(shapes, placement_index + 1) {
+                if self.fill_with_rec(shapes, placement_index + 1, x, y) {
                     return true;
                 }
 
-                self.remove(pieces, placement_vector);
+                self.remove(pieces, (x, y));
             }
 
             let amount = &mut shapes[i].1;
@@ -74,58 +90,31 @@ impl Grid {
         false
     }
 
-    fn find_placement_vector(&self, pieces: &[(isize, isize)]) -> Option<(isize, isize)> {
-        for grid_y in 0..self.height() as isize {
-            for grid_x in 0..self.width() as isize {
-                'next_origin: for (x_origin, y_origin) in pieces {
-                    let placement_vector = (grid_x + x_origin, grid_y + y_origin);
-
-                    for (x, y) in pieces {
-                        let (x, y) = (placement_vector.0 - x, placement_vector.1 - y);
-
-                        if x < 0
-                            || y < 0
-                            || x >= self.width() as isize
-                            || y >= self.height() as isize
-                        {
-                            assert!(!self.is_vacant((x, y)), "vacant for {x}, {y}");
-                        }
-
-                        if !self.is_vacant((x, y)) {
-                            continue 'next_origin;
-                        }
-                    }
-
-                    return Some(placement_vector);
-                }
-            }
-        }
-
-        None
+    fn can_place_pieces_at(&self, pieces: &[(isize, isize)], (x, y): (isize, isize)) -> bool {
+        pieces
+            .iter()
+            .map(|(xd, yd)| (x + xd, y + yd))
+            .all(|(x, y)| self.is_vacant((x, y)))
     }
 
     fn place(
         &mut self,
         pieces: &[(isize, isize)],
-        placement_vector: (isize, isize),
+        (x, y): (isize, isize),
         placement_index: usize,
         glyph: char,
     ) {
-        for (x, y) in pieces {
-            let x = placement_vector.0 - x;
-            let y = placement_vector.1 - y;
-
-            self.cells.set((x, y), Some((placement_index, glyph)));
-        }
+        pieces
+            .iter()
+            .map(|(xd, yd)| (x + xd, y + yd))
+            .for_each(|(x, y)| self.cells.set((x, y), Some((placement_index, glyph))))
     }
 
-    fn remove(&mut self, pieces: &[(isize, isize)], placement_vector: (isize, isize)) {
-        for (x, y) in pieces {
-            let x = placement_vector.0 - x;
-            let y = placement_vector.1 - y;
-
-            self.cells.set((x, y), None);
-        }
+    fn remove(&mut self, pieces: &[(isize, isize)], (x, y): (isize, isize)) {
+        pieces
+            .iter()
+            .map(|(xd, yd)| (x + xd, y + yd))
+            .for_each(|(x, y)| self.cells.set((x, y), None))
     }
 }
 
@@ -157,18 +146,19 @@ impl fmt::Display for Grid {
             write!(f, "│")?;
 
             for x in 0..self.width() {
-                let (placement_index, _glyph) = self
+                let color = self
                     .cells
                     .get((x, y))
                     .copied()
                     .flatten()
-                    .unwrap_or((0, ' '));
-                let color = &colors[placement_index];
+                    .map(|(placement_index, _glyps)| &colors[placement_index]);
                 let mut style = Style::default();
-                style.on(color);
+
+                if let Some(color) = color {
+                    style.on(color);
+                }
 
                 write!(f, "{}", brush.paint(" ", style))?;
-                // write!(f, "{glyph}")?;
             }
 
             writeln!(f, "│")?;
@@ -181,6 +171,53 @@ impl fmt::Display for Grid {
         write!(f, "┘")?;
 
         Ok(())
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Cursor {
+    width: usize,
+    height: usize,
+    x: usize,
+    y: usize,
+}
+
+impl Cursor {
+    pub fn new(width: usize, height: usize) -> Self {
+        Self {
+            width,
+            height,
+            x: 0,
+            y: 0,
+        }
+    }
+
+    pub fn can_advance(&self) -> bool {
+        self.x + 1 < self.width || self.y + 1 < self.height
+    }
+
+    pub fn is_at_end(&self) -> bool {
+        !self.can_advance()
+    }
+
+    pub fn advance(&mut self) {
+        if self.x + 1 < self.width {
+            self.x += 1;
+            return;
+        }
+
+        if self.y + 1 < self.height {
+            self.y += 1;
+            self.x = 0;
+        }
+    }
+
+    pub fn x(&self) -> usize {
+        self.x
+    }
+
+    pub fn y(&self) -> usize {
+        self.y
     }
 }
 
@@ -205,7 +242,7 @@ impl Shape {
             }
         }
 
-        let additional_rotations = iter::successors(Some(pieces.clone()), move |prev_pieces| {
+        let mut additional_rotations = iter::successors(Some(pieces.clone()), move |prev_pieces| {
             if num_additional_rotations == 0 {
                 return None;
             };
@@ -214,12 +251,32 @@ impl Shape {
 
             Some(Self::rotate_pieces(prev_pieces))
         })
-        .collect();
+        .collect::<Vec<_>>();
+
+        {
+            Self::normalize_pieces(&mut pieces);
+
+            for pieces in &mut additional_rotations {
+                Self::normalize_pieces(pieces);
+            }
+        }
 
         Self {
             pieces,
             additional_rotations,
             glyph,
+        }
+    }
+
+    // adjusts coordinates such that the top left minos is (0, 0)
+    fn normalize_pieces(pieces: &mut [(isize, isize)]) {
+        let Some(&(xd, yd)) = pieces.iter().min_by_key(|(x, y)| (y, x)) else {
+            return;
+        };
+
+        for (x, y) in pieces {
+            *x -= xd;
+            *y -= yd;
         }
     }
 
@@ -286,7 +343,7 @@ pub mod shape {
     use crate::Shape;
 
     pub static SQUARE: LazyLock<Shape> = LazyLock::new(|| Shape::from_str("##\n##", 0, '#'));
-    pub static LINE: LazyLock<Shape> = LazyLock::new(|| Shape::from_str("####", 1, '+'));
+    pub static LINE: LazyLock<Shape> = LazyLock::new(|| Shape::from_str("####", 1, 'I'));
     pub static Z: LazyLock<Shape> = LazyLock::new(|| Shape::from_str("##\n ##", 1, 'Z'));
     pub static REVERSE_Z: LazyLock<Shape> = LazyLock::new(|| Shape::from_str(" ##\n##", 1, 'N'));
     pub static L: LazyLock<Shape> = LazyLock::new(|| Shape::from_str("###\n#", 3, 'L'));
