@@ -1,6 +1,5 @@
 use std::{fmt, iter};
 
-use fnv::FnvHashSet;
 use pastel::ansi::{Brush, Stream, Style};
 use pastel::distinct::{distinct_colors, DistanceMetric};
 
@@ -75,7 +74,7 @@ impl Grid {
         false
     }
 
-    fn find_placement_vector(&self, pieces: &FnvHashSet<(isize, isize)>) -> Option<(isize, isize)> {
+    fn find_placement_vector(&self, pieces: &[(isize, isize)]) -> Option<(isize, isize)> {
         for grid_y in 0..self.height() as isize {
             for grid_x in 0..self.width() as isize {
                 'next_origin: for (x_origin, y_origin) in pieces {
@@ -107,7 +106,7 @@ impl Grid {
 
     fn place(
         &mut self,
-        pieces: &FnvHashSet<(isize, isize)>,
+        pieces: &[(isize, isize)],
         placement_vector: (isize, isize),
         placement_index: usize,
         glyph: char,
@@ -120,7 +119,7 @@ impl Grid {
         }
     }
 
-    fn remove(&mut self, pieces: &FnvHashSet<(isize, isize)>, placement_vector: (isize, isize)) {
+    fn remove(&mut self, pieces: &[(isize, isize)], placement_vector: (isize, isize)) {
         for (x, y) in pieces {
             let x = placement_vector.0 - x;
             let y = placement_vector.1 - y;
@@ -187,14 +186,14 @@ impl fmt::Display for Grid {
 
 #[derive(Clone)]
 pub struct Shape {
-    pieces: FnvHashSet<(isize, isize)>,
-    additional_rotations: Vec<FnvHashSet<(isize, isize)>>,
+    pieces: Vec<(isize, isize)>,
+    additional_rotations: Vec<Vec<(isize, isize)>>,
     glyph: char,
 }
 
 impl Shape {
     fn from_str(s: &str, mut num_additional_rotations: usize, glyph: char) -> Self {
-        let mut pieces = FnvHashSet::default();
+        let mut pieces = Vec::default();
 
         for (y, line) in s.lines().enumerate() {
             for (x, ch) in line.chars().enumerate() {
@@ -202,7 +201,7 @@ impl Shape {
                     continue;
                 }
 
-                pieces.insert((x as isize, y as isize));
+                pieces.push((x as isize, y as isize));
             }
         }
 
@@ -224,12 +223,13 @@ impl Shape {
         }
     }
 
-    fn rotate_pieces(pieces: &FnvHashSet<(isize, isize)>) -> FnvHashSet<(isize, isize)> {
+    fn rotate_pieces(pieces: &[(isize, isize)]) -> Vec<(isize, isize)> {
         pieces.iter().map(|&(x, y)| (y, -x)).collect()
     }
 
-    fn all_rotations(&self) -> impl Iterator<Item = &FnvHashSet<(isize, isize)>> {
-        iter::once(&self.pieces).chain(&self.additional_rotations)
+    fn all_rotations(&self) -> impl Iterator<Item = &[(isize, isize)]> {
+        iter::once(self.pieces.as_slice())
+            .chain(self.additional_rotations.iter().map(Vec::as_slice))
     }
 }
 
