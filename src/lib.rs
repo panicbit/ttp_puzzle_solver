@@ -14,12 +14,32 @@ impl Grid {
         }
     }
 
+    pub fn num_placements(&self) -> usize {
+        self.cells
+            .values()
+            .flatten()
+            .map(|(placement_index, _)| placement_index)
+            .max()
+            .copied()
+            .unwrap_or(0)
+            + 1
+    }
+
     pub fn width(&self) -> usize {
         self.cells.width
     }
 
     pub fn height(&self) -> usize {
         self.cells.height
+    }
+
+    pub fn get_placement_index(&self, x: usize, y: usize) -> usize {
+        self.cells
+            .get((x, y))
+            .copied()
+            .flatten()
+            .map(|(placement_index, _)| placement_index)
+            .unwrap_or(0)
     }
 
     fn is_vacant(&self, (x, y): (isize, isize)) -> bool {
@@ -126,21 +146,11 @@ impl Grid {
 
 impl fmt::Display for Grid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let num_placements = self
-            .cells
-            .values()
-            .flatten()
-            .map(|(placement_index, _)| placement_index)
-            .max()
-            .copied()
-            .unwrap_or(0)
-            + 1;
-        let num_placements = num_placements.max(2);
+        let num_colors = self.num_placements().max(2);
         let distance_metric = DistanceMetric::CIEDE2000;
         let fixed_colors = vec![];
         let brush = Brush::from_environment(Stream::Stdin);
-        let (colors, _) =
-            distinct_colors(num_placements, distance_metric, fixed_colors, &mut |_| {});
+        let (colors, _) = distinct_colors(num_colors, distance_metric, fixed_colors, &mut |_| {});
 
         write!(f, "┌")?;
         for _ in 0..self.width() {
@@ -319,6 +329,7 @@ impl fmt::Display for Shape {
     }
 }
 
+#[derive(Default, Debug, Clone)]
 pub struct ShapeSet {
     pub square: usize,
     pub line: usize,
