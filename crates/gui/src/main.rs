@@ -183,7 +183,7 @@ impl App {
 
 fn sigil_label(sigil: Sigil) -> &'static str {
     match sigil {
-        Sigil::Square => "S",
+        Sigil::Square => "Sq",
         Sigil::Line => "I",
         Sigil::Z => "Z",
         Sigil::ReverseZ => "RZ",
